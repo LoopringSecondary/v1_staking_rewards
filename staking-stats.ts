@@ -26,8 +26,8 @@ const withdrawalRecordFile = "./.withdraw-records.json";
 const resFile = "./.staking-reward-res.json"
 const csvResFile = "./staking_rewards.csv"
 
-const stakingType = 0;
-const withdrawType = 1;
+const STAKING = 0;
+const WITHDRAWAL = 1;
 
 async function fetchData() {
   console.log("fetch all LRCStaked events ...");
@@ -43,7 +43,7 @@ async function fetchData() {
       blockNumber: e.blockNumber,
       user: e.returnValues.user,
       amount: Number(e.returnValues.amount),
-      type: stakingType
+      type: STAKING
     };
   });
   fs.writeFileSync(stakingRecordFile, JSON.stringify(stakingRecords, undefined, 2));
@@ -61,7 +61,7 @@ async function fetchData() {
       blockNumber: e.blockNumber,
       user: e.returnValues.user,
       amount: Number(e.returnValues.amount),
-      type: stakingType
+      type: STAKING
     };
   });
   fs.writeFileSync(rewardRecordFile, JSON.stringify(rewardedRecords, undefined, 2));
@@ -78,7 +78,7 @@ async function fetchData() {
       blockNumber: e.blockNumber,
       user: e.returnValues.user,
       amount: Number(e.returnValues.amount),
-      type: withdrawType
+      type: WITHDRAWAL
     };
   });
   fs.writeFileSync(withdrawalRecordFile, JSON.stringify(withdrawRecords, undefined, 2));
@@ -108,7 +108,7 @@ function stats() {
     if (r.blockNumber > untilBlock) continue;
     if (resMap.has(r.user)) {
       const record = resMap.get(r.user);
-      if (r.type == stakingType) {
+      if (r.type == STAKING) {
 
         const newBlockNumber = Math.round(
           (record.blockNumber * record.amount + r.blockNumber * r.amount) /
@@ -123,7 +123,7 @@ function stats() {
       }
       resMap.set(r.user, record);
     } else {
-      assert(r.type == stakingType, "Staking record not found for withdrawal!");
+      assert(r.type == STAKING, "Staking record not found for withdrawal!");
       resMap.set(r.user, r);
     }
   }
@@ -171,9 +171,9 @@ function stats() {
   console.log("process finished. result saved to file:", resFile);
 
   // write result to a CSV file
-  let csvContent = "address,reward(wei),reward(ether)\n";
+  let csvContent = "Address, Reward (LRC)\n";
   for (const item of result) {
-    csvContent += item.user + "," + item.reward + "," + item.rewardFixed + "\n";
+    csvContent += item.user + ", "  + item.rewardFixed + "\n";
   }
 
   fs.writeFileSync(csvResFile, csvContent);
@@ -189,7 +189,7 @@ function checkResSum() {
 }
 
 async function main() {
-  await fetchData();
+  // await fetchData();
   stats();
   checkResSum();
 }
