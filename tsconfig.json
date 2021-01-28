@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "es6",
+    "downlevelIteration": true,
+    "lib": [
+      "dom",
+      "es6",
+      "es2015.collection",
+      "es2015.iterable"
+    ]
+  }
+}
