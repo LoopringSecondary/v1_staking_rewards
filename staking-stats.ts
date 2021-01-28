@@ -166,13 +166,14 @@ function stats() {
     );
   }
 
-  result = result.sort((r1, r2) => Number(r2.reward) - Number(r1.reward));
   fs.writeFileSync(resFile, JSON.stringify(result, undefined, 2));
   console.log("process finished. result saved to file:", resFile);
 
   // write result to a CSV file
   let csvContent = "Address, Reward (LRC)\n";
   for (const item of result) {
+    // filter zero
+    if (Number(item.rewardFixed) == 0)  continue;
     csvContent += item.user + ", "  + item.rewardFixed + "\n";
   }
 
@@ -189,7 +190,7 @@ function checkResSum() {
 }
 
 async function main() {
-  // await fetchData();
+  await fetchData();
   stats();
   checkResSum();
 }
