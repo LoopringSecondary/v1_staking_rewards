@@ -10,5 +10,6 @@
 ### Run
 - ts-node staking-stats.ts
 
-### Result File: staking-reward-res.json
+### Result File:
+- staking_rewards.csv
 
