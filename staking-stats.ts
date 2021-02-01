@@ -8,7 +8,6 @@ import {
   zeroAddress
 } from "@freemanz/ts-utils"
 const assert = require("assert");
-import BigNumber from "bignumber.js";
 
 const web3 = newWeb3WithPrivateKey(
   "11".repeat(32), // random private key
@@ -19,7 +18,7 @@ const myeth = new Eth(web3, false);
 // last tx: 0x34295009f2e2b05d8121393f41ef8754034d57559ad350ca0bee0fa19212bd6b
 const untilBlock = 11708702;
 const blocksOf90Days = 586162;
-const totalReward = new BigNumber("1" + "0".repeat(24)); // 1000,000 LRC
+const extReward = 1e24; // 1000,000 LRC
 const stakingRecordFile = "./.staking-records.json";
 const rewardRecordFile = "./.reward-records.json";
 const withdrawalRecordFile = "./.withdraw-records.json";
@@ -27,7 +26,8 @@ const resFile = "./.staking-reward-res.json"
 const csvResFile = "./staking_rewards.csv"
 
 const STAKING = 0;
-const WITHDRAWAL = 1;
+const CLAIM = 1;
+const WITHDRAWAL = 2;
 
 async function fetchData() {
   console.log("fetch all LRCStaked events ...");
@@ -61,7 +61,7 @@ async function fetchData() {
       blockNumber: e.blockNumber,
       user: e.returnValues.user,
       amount: Number(e.returnValues.amount),
-      type: STAKING
+      type: CLAIM
     };
   });
   fs.writeFileSync(rewardRecordFile, JSON.stringify(rewardedRecords, undefined, 2));
@@ -108,60 +108,69 @@ function stats() {
     if (r.blockNumber > untilBlock) continue;
     if (resMap.has(r.user)) {
       const record = resMap.get(r.user);
+      let blocks = untilBlock - r.blockNumber;
       if (r.type == STAKING) {
-
-        const newBlockNumber = Math.round(
-          (record.blockNumber * record.amount + r.blockNumber * r.amount) /
-            (record.amount + r.amount)
-        );
-        record.blockNumber = newBlockNumber;
-        record.amount = record.amount + r.amount;
-
+        blocks = blocks < blocksOf90Days ? blocksOf90Days : blocks;
+        record.point += blocks * r.amount;
+        // console.log(record.point, blocks, r.amount);
+      } else if (r.type == CLAIM) {
+        blocks = blocks < blocksOf90Days ? blocksOf90Days : blocks;
+        record.point += blocks * r.amount;
+        record.reward += r.amount;
+        // console.log(record.point, blocks, r.amount);
       } else {
-        record.blockNumber = r.blockNumber;
-        record.amount = record.amount - r.amount;
+        record.point -= blocks * r.amount;
       }
       resMap.set(r.user, record);
     } else {
       assert(r.type == STAKING, "Staking record not found for withdrawal!");
-      resMap.set(r.user, r);
+      const record: any = {};
+      let blocks = untilBlock - r.blockNumber;
+      blocks = blocks < blocksOf90Days ? blocksOf90Days : blocks;
+      record.point = blocks * r.amount;
+      record.reward = 0;
+      resMap.set(r.user, record);
     }
   }
   console.log("all participants size:", resMap.size);
 
-  // filter dust.
-  const qualifiedRecords = [...resMap.values()].filter(r => Math.abs(r.amount) > 1e18);
-  console.log("qualifiedRecords length:", qualifiedRecords.length);
+  let totalPoints = 0;
+  let totalReward = extReward;
+  for (const r of resMap.values()) {
+    totalPoints += r.point;
+    totalReward += r.reward;
+  }
 
-  let totalPoints = new BigNumber(0);
-  for (const r of qualifiedRecords) {
-    assert(r.amount > 0, "amount < 0 after filter.");
-    let blocks = untilBlock - r.blockNumber;
-    blocks = blocks < blocksOf90Days ? blocksOf90Days : blocks;
-    const point = new BigNumber(r.amount).times(blocks);
-    totalPoints = totalPoints.plus(point);
+  const filteredMap = new Map();
+  for (const k of resMap.keys()) {
+    const r = resMap.get(k);
+    let reward = totalReward * r.point / totalPoints;
+    if (reward <= r.reward) continue;
+    filteredMap.set(k, r);
+  }
+
+  totalPoints = 0;
+  totalReward = extReward;
+  for (const r of filteredMap.values()) {
+    totalPoints += r.point;
+    totalReward += r.reward;
   }
 
   let result = [];
-  for (const r of qualifiedRecords) {
-    let blocks = untilBlock - r.blockNumber;
-    blocks = blocks < blocksOf90Days ? blocksOf90Days : blocks;
-    const point = new BigNumber(r.amount).times(blocks);
-    let rewardBN = totalReward.times(point).div(totalPoints);
-
-    // skip if reward <= 1 LRC
-    if (rewardBN.lte(1e18)) continue;
-
+  for (const k of filteredMap.keys()) {
+    const r = filteredMap.get(k);
+    let reward = totalReward * r.point / totalPoints;
+    reward = (reward - r.reward) / 1e18;
     // charge 1 LRC for transfer fee:
-    rewardBN = rewardBN.minus(1e18);
+    reward -= 1;
 
-    r.reward = rewardBN.toFixed(0, 1);
-    r.rewardFixed = rewardBN.div(1e18).toFixed(2, 1);
+    // filter dust:
+    if (reward < 1) continue;
+
     result.push(
       {
-        user: r.user,
-        reward: r.reward,
-        rewardFixed: r.rewardFixed
+        user: k,
+        reward: reward.toFixed(3),
       }
     );
   }
@@ -172,9 +181,7 @@ function stats() {
   // write result to a CSV file
   let csvContent = "Address, Reward (LRC)\n";
   for (const item of result) {
-    // filter zero
-    if (Number(item.rewardFixed) == 0)  continue;
-    csvContent += item.user + ", "  + item.rewardFixed + "\n";
+    csvContent += item.user + ", "  + item.reward + "\n";
   }
 
   fs.writeFileSync(csvResFile, csvContent);
@@ -190,7 +197,7 @@ function checkResSum() {
 }
 
 async function main() {
-  await fetchData();
+  // await fetchData();
   stats();
   checkResSum();
 }
