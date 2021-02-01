@@ -197,7 +197,7 @@ function checkResSum() {
 }
 
 async function main() {
-  // await fetchData();
+  await fetchData();
   stats();
   checkResSum();
 }
